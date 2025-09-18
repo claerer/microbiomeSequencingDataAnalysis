@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Output file
+out_file="study_file_counts.txt"
+
+# Create header
+echo -e "Study\tFileCount" > "$out_file"
+
+# Collect study numbers from all fastq files
+for study in {1..20}; do
+    if [[ $study -eq 11 ]]; then
+        continue
+    fi
+
+    # Count files where the penultimate underscore field = study number
+    count=$(ls *.fastq 2>/dev/null | \
+        awk -F'[_\.]' -v s="$study" '{ if ($(NF-2) == s && $(NF-1) ~ /^[12P]$/) print }' | wc -l)
+
+    echo -e "$study\t$count" >> "$out_file"
+done
