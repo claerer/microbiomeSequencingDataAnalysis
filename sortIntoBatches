@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DATA_DIR="DATA"
+TSV="batches.tsv"
+NUM_BATCHES=10
+OUT="batch_contents.tsv"
+OUT2="batch_matrix.csv"
+########################################################
+#table
+{
+  # Write header
+  echo -e "sample\tbatch"
+
+  # List matching files and assign batches in order
+  ls DATA | grep -E '_[1P]\.fastq$' |
+  awk -v OFS='\t' -v NB="$NUM_BATCHES" '
+    {
+      i++;
+      batch = ((i-1) % NB) + 1;
+      print $0, batch;
+      # If the filename ends in _1.fastq, also output a _2.fastq with same batch
+      if ($0 ~ /_1\.fastq$/) {
+        sub(/_1\.fastq$/, "_2.fastq", $0);
+        print $0, batch;
+      }
+    }
+  '
+} > batches.tsv
+########################################################
+#sort
+# make DATA/1 .. DATA/40
+for i in $(seq 1 "$NUM_BATCHES"); do mkdir -p "$DATA_DIR/$i"; done
+
+# move files according to batches.tsv (header: sample<TAB>batch)
+tail -n +2 "$TSV" | awk -F'\t' 'NF>=2{print $1 "\t" $2}' \
+| while IFS=$'\t' read -r sample batch; do
+  mv -n -- "$DATA_DIR/$sample" "$DATA_DIR/$batch/"
+done
+
+# header
+echo -e "batch\tfile" > "$OUT"
+
+# list files batch by batch
+for i in $(seq 1 "$NUM_BATCHES"); do
+  for f in "$DATA_DIR/$i"/*; do
+    [ -e "$f" ] || continue
+    echo -e "$i\t$(basename "$f")"
+  done
+done >> "$OUT"
+
+echo "Wrote: $OUT"
+########################################################
+#batches_matrix.csv
+
+# header row: 1,2,3,...,40
+{
+  for i in $(seq 1 "$NUM_BATCHES"); do
+    printf "\"%s\"%s" "$i" $([[ $i -lt $NUM_BATCHES ]] && echo -n ",")
+  done
+  echo
+} > "$OUT2"
+
+# gather file lists
+for i in $(seq 1 "$NUM_BATCHES"); do
+  ls -1 "$DATA_DIR/$i" 2>/dev/null > "batch_$i.list" || true
+done
+
+# determine the longest list
+max=0
+for i in $(seq 1 "$NUM_BATCHES"); do
+  n=$(wc -l < "batch_$i.list")
+  (( n > max )) && max=$n
+done
+
+# print rows
+for row in $(seq 1 $max); do
+  for i in $(seq 1 "$NUM_BATCHES"); do
+    file=$(sed -n "${row}p" "batch_$i.list")
+    # quote each field to be safe
+    printf "\"%s\"%s" "$file" $([[ $i -lt $NUM_BATCHES ]] && echo -n ",")
+  done
+  echo
+done >> "$OUT2"
+
+rm batch_*.list
+echo "Wrote: $OUT2
