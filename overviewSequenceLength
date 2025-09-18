@@ -1,0 +1,62 @@
+library(ShortRead)
+library(ggplot2)
+wd <- "RESULTS"
+setwd(wd)
+path <- "/lisc/scratch/internal_medicine1/widderCF/DATA"
+fastq_files2 <- list.files(path, pattern = "\\.fastq", full.names = TRUE)
+all_results <- list()
+for (file in fastq_files2) {
+  
+  # Read the FastQ file
+  fq <- readFastq(file)
+  
+  # Extract quality scores and sequences
+  quals <- quality(fq)
+  score_matrix <- as(quals, "matrix")
+  seq_lengths <- width(sread(fq))
+  
+  # Determine first low-quality position OR full length
+  low_qual_positions <- mapply(function(q, len) {
+    idx <- which(q < 2)
+    if (length(idx) > 0) return(idx[1]) else return(len)
+  }, split(score_matrix, row(score_matrix)), seq_lengths)
+  
+  # Store results in a data.frame
+  sample_name <- tools::file_path_sans_ext(basename(file))
+  df <- data.frame(
+    sample = sample_name,
+    read_id = as.character(id(fq)),
+    pos_or_length = low_qual_positions,
+    stringsAsFactors = FALSE
+  )
+  
+  all_results[[sample_name]] <- df
+}
+# Combine all sample data into one data.frame
+final_results <- do.call(rbind, all_results)
+# Save the result
+write.csv(final_results, file = "tableOfLengths.csv", row.names = FALSE)
+#plot histogram
+distribution<-ggplot(final_results, aes(x = pos_or_length)) +
+  geom_histogram(binwidth = 1, fill = "#69b3a2", color = "black", alpha = 0.7) +
+  labs(
+    title = "Distribution of Read Lengths",
+    x = "Position of First Low-Quality Score (<2) or Read Length",
+    y = "Read Count"
+  ) +
+  theme_minimal()
+  ggsave("distributionOfReadLengths.png", plot = distribution, width = 8, height = 6, dpi = 300)
+#Log scale plot
+logDistribution<-ggplot(final_results, aes(x = pos_or_length)) +
+  geom_histogram(binwidth = 1, fill = "#69b3a2", color = "black", alpha = 0.7) +
+  scale_y_log10() +
+  labs(
+    title = "LogDistribution of Read Lengths",
+    x = "Position of First Low-Quality Score (<2) or Read Length",
+    y = "Log10(Read Count)"
+  ) +
+  theme_minimal()
+  ggsave("logDistributionOfReadLengths.png", plot = logDistribution, width = 8, height = 6, dpi = 300)
+
+  ggsave("distributionOfReadLengths.pdf", plot = distribution, width = 8, height = 6)
+ggsave("logDistributionOfReadLengths.pdf", plot = logDistribution, width = 8, height = 6)
