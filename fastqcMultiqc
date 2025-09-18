@@ -1,0 +1,9 @@
+#fastqc of all fastq files in the current Directory, save into Output Directory
+fastqc *.fastq -o fastqc_results
+
+module load conda
+conda activate multiqc
+
+multiqc fastqc_results -o multiqc_report
+
+#the Directory multiqc_report includes an .html file, this Shows the entire report
